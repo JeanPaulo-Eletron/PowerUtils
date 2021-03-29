@@ -862,4 +862,21 @@
     Height = 133
     TabOrder = 5
   end
+  object Panel1: TPanel
+    Left = 198
+    Top = 361
+    Width = 183
+    Height = 42
+    BevelInner = bvSpace
+    BevelKind = bkSoft
+    Caption = 'Power Utils !'
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'Tahoma'
+    Font.Style = [fsBold]
+    ParentFont = False
+    TabOrder = 6
+    OnMouseDown = MouseDown
+  end
 end

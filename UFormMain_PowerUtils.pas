@@ -28,6 +28,7 @@ type
     EditUsuario: TEdit;
     EditServidor: TEdit;
     Memo1: TMemo;
+    Panel1: TPanel;
     procedure FormCreate(Sender: TObject);
     procedure BitBtn_FecharClick(Sender: TObject);
     procedure BitBtnOcultarClick(Sender: TObject);
