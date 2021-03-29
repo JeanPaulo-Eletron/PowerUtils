@@ -27,6 +27,7 @@ type
     Label6: TLabel;
     EditUsuario: TEdit;
     EditServidor: TEdit;
+    Memo1: TMemo;
     procedure FormCreate(Sender: TObject);
     procedure BitBtn_FecharClick(Sender: TObject);
     procedure BitBtnOcultarClick(Sender: TObject);
@@ -135,8 +136,13 @@ begin
         then Result :=
           Procedure
           Begin
-            Show;
-            Application.BringToFront;
+            if Showing
+              then hide
+              else begin
+                Show;
+                Application.BringToFront;
+                Memo1.SetFocus;
+              end;
           end;
     end,
     function: TCallBack

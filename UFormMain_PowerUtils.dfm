@@ -855,4 +855,11 @@
       OnExit = EditConexaoExit
     end
   end
+  object Memo1: TMemo
+    Left = 92
+    Top = 228
+    Width = 389
+    Height = 133
+    TabOrder = 5
+  end
 end
