@@ -5,7 +5,8 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, JvFullColorSpaces, JvFullColorCtrls,
-  Vcl.StdCtrls, Vcl.Buttons, Vcl.ExtCtrls, UModuloDeRastreio_PowerUtils;
+  Vcl.StdCtrls, Vcl.Buttons, Vcl.ExtCtrls, UModuloDeRastreio_PowerUtils,
+  JvExStdCtrls, JvButton, JvCtrls, System.ImageList, Vcl.ImgList;
 
 type
   TFormMain = class(TForm)
@@ -23,11 +24,15 @@ type
     Label4: TLabel;
     Label5: TLabel;
     EditSenha: TEdit;
-    EditDataBase: TEdit;
+    CBDataBase: TComboBox;
     Label6: TLabel;
     EditUsuario: TEdit;
     EditServidor: TEdit;
-    Memo1: TMemo;
+    MemoNotePad: TMemo;
+    PanelRodape: TPanel;
+    BitBtnCentralizarNaTela: TJvImgBtn;
+    BitBtn3: TBitBtn;
+    ImagensDosBtns: TImageList;
     Panel1: TPanel;
     procedure FormCreate(Sender: TObject);
     procedure BitBtn_FecharClick(Sender: TObject);
@@ -37,7 +42,12 @@ type
       Shift: TShiftState; X, Y: Integer);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure EditConexaoExit(Sender: TObject);
+    procedure BitBtnCentralizarNaTelaClick(Sender: TObject);
+    procedure BitBtn3Click(Sender: TObject);
   private
+    ACentralizarNaTela: Boolean;
+    procedure SetCentralizarNaTela(Value: Boolean);
+    property CentralizarNaTela: Boolean read ACentralizarNaTela write SetCentralizarNaTela;
     procedure DefinirGatilhos;
     { Private declarations }
   public
@@ -53,22 +63,31 @@ implementation
 
 {$R *.dfm}
 
-uses UUtilitarios_PowerUtils, UProceduresDosGatilhos_PowerUtils;
+uses UUtilitarios_PowerUtils, UProceduresDosGatilhos_PowerUtils,
+  UModuloDeSQL_PowerUtils, HelpersPadrao;
 
 procedure TFormMain.BitBtn_FecharClick(Sender: TObject);
 begin
   Close;
 end;
 
+procedure TFormMain.SetCentralizarNaTela(Value: Boolean);
+begin
+  BitBtnCentralizarNaTela.Default := Value;
+  ACentralizarNaTela := Value;
+end;
+
 procedure TFormMain.BitBtn1Click(Sender: TObject);
 var
   ExePath, Txt, CaminhoENomeArquivo: String;
   arquivo: TStringList;
+  RetornoSQL: TRetornoSQL;
 begin
   if Panel_InformaçõesAdicionais.Visible
     then begin
       Panel_InformaçõesAdicionais.Hide;
       PanelConexão.Show;
+      CBDataBase.Clear;
       ExePath    := ExtractFilePath(Application.ExeName);
       arquivo := TStringList.Create;
       CaminhoENomeArquivo := ExePath + 'Config.ini';
@@ -80,13 +99,63 @@ begin
       Txt := arquivo.Strings[2];
       EditSenha.Text    := TRIM(Copy(Txt,POS(':',Txt)+1,Length(Txt)));
       Txt := arquivo.Strings[3];
-      EditDataBase.Text := TRIM(Copy(Txt,POS(':',Txt)+1,Length(Txt)));
+      CBDataBase.Items.Append(TRIM(Copy(Txt,POS(':',Txt)+1,Length(Txt))));
+      CBDataBase.ItemIndex := CBDataBase.Items.IndexOf(TRIM(Copy(Txt,POS(':',Txt)+1,Length(Txt))));
+
+      RetornoSQL := TRetornoSQL.Create;
+      ConsultarSQLAssyncronamente(['SELECT name --, database_id, create_date',
+                                   'FROM sys.databases',
+                                   'Where name not in (''master'', ''model'', ''msdb'', ''tempdb'')',
+                                   'Order by Name'], RetornoSQL,
+                                   Procedure
+                                   var I : Integer;
+                                   begin
+                                     if not PanelConexão.Showing
+                                       then Exit;
+                                     I := 1;//Primeira linha é o nome da coluna
+                                     CBDataBase.Clear;
+                                     While I < Length(RetornoSQL.Value) do begin
+                                       CBDataBase.Items.Append(RetornoSQL.Value[I][0]);
+                                       INC(I);
+                                     end;
+                                     CBDataBase.ItemIndex := CBDataBase.Items.IndexOf(TRIM(Copy(Txt,POS(':',Txt)+1,Length(Txt))));
+                                   end);
       arquivo.Free;
     end
     else begin
       Panel_InformaçõesAdicionais.Show;
       PanelConexão.Hide;
     end;
+end;
+
+procedure TFormMain.BitBtn3Click(Sender: TObject);
+begin
+  if not Assigned(FormSQL) then begin
+    FormStyle := fsNormal;
+    PanelRodape.Top  := 11;
+    PanelRodape.Left := 197;
+    Application.CreateForm(TFormSQL, FormSQL);
+    with FormSQL do begin
+      BorderStyle := bsNone;
+      Left := FormMain.Left - (Width - FormMain.Width) div 2;
+      Top  := FormMain.Top + FormMain.Height div 2 + Panel_RastreiaInput.Height div 2;
+      MemoNotePad.Enabled := False;
+      Show;
+    end;
+  end
+  else begin
+    FormStyle := fsStayOnTop;
+    FormSQL.Close;
+    FormSQL.Free;
+    FormSQL := Nil;
+    PanelRodape.Top  := 361;
+    PanelRodape.Left := 196;
+  end;
+end;
+
+procedure TFormMain.BitBtnCentralizarNaTelaClick(Sender: TObject);
+begin
+  CentralizarNaTela := Not CentralizarNaTela;
 end;
 
 procedure TFormMain.BitBtnOcultarClick(Sender: TObject);
@@ -141,8 +210,13 @@ begin
               then hide
               else begin
                 Show;
+                if CentralizarNaTela then begin
+                  Left := (Screen.Monitors[0].Width  div 2) - (Width  div 2);
+                  Top  := (Screen.Monitors[0].Height div 2) - (Height div 2);
+                end;
                 Application.BringToFront;
-                Memo1.SetFocus;
+                if MemoNotePad.Enabled
+                  then MemoNotePad.SetFocus;
               end;
           end;
     end,
@@ -197,7 +271,7 @@ begin
   NovoArq.Add('Servidor        : '+EditServidor.Text);
   NovoArq.Add('Usuário         : '+EditUsuario.Text);
   NovoArq.Add('Senha           : '+EditSenha.Text);
-  NovoArq.Add('LicencaDataBase : '+EditDataBase.Text);
+  NovoArq.Add('LicencaDataBase : '+CBDataBase.Items[CBDataBase.ItemIndex]);
   NovoArq.Add('O Sistema só irá considerar as 4 primeiras linhas e somente o que estiver após o ":",');
   NovoArq.Add('ele não ira considerar espaços adicionais a direita e esquerda.');
 

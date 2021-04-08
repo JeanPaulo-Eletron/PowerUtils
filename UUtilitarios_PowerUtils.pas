@@ -3,7 +3,7 @@ unit UUtilitarios_PowerUtils;
 interface
 
 uses Windows, SysUtils, Generics.Collections,  Classes, JvADOQuery, JvBaseDBThreadedDataset, Data.DB, Vcl.StdCtrls,
-     Data.Win.ADODB, Graphics, Vcl.Forms, Dialogs, ActiveX, RTTI, StrUtils;
+     Data.Win.ADODB, Graphics, Vcl.Forms, Dialogs, ActiveX, RTTI, StrUtils, System.Threading;
 
 Type
   TCallBack = reference to procedure;
@@ -12,6 +12,10 @@ Type
     Callback : TCallBack;
     //Uso interno, serve para ele chamar o callback que eu configurei ao criar esse objeto para ser chamada no AfterThreadExecution.
     procedure CallBackSQLAssync(DataSet: TDataSet;Operation: TJvThreadedDatasetOperation);
+  End;
+
+  TRetornoSQL = Class(TObject)
+    Value: TArray<TArray<String>>;
   End;
 
   //Alguns tipos para uso interno
@@ -93,6 +97,11 @@ Type
   procedure InitializeThreadConectionMode;
 
   procedure Mensagem(Msg: String);
+
+  Function Concatenar(Linhas: Array of String): String;
+
+  Function ConsultarSQLAssyncronamente( ScriptSQL : TArray<String>; RetornoSQL: TRetornoSQL; Callback: TCallBack): iTask;
+
 //--//--//--//--//--//--//--//--//--//--/EM DESENVOLVIMENTO/--//--//--//--//--//--//--//--//--//--//--//--//
 
   procedure DesenharSeta(OCor: TColor; OLargura: Integer; Origem, Destino: TPoint);
@@ -123,6 +132,8 @@ var
 const
   FimLinhaStr: String = #13;
 implementation
+
+uses UFormMain_PowerUtils;
 
 Function  ExecutaSQLAssync(SQLText : String; Connection: TAdoConnection):String;overload;
 //Use essa aqui caso queira um uso r�pido dessa fun��o no atualiza banco de dados
@@ -920,11 +931,127 @@ procedure Mensagem(Msg: String);
 begin
   with CreateMessageDialog(Msg, mtInformation, [mbOk]) do
   try
-    Caption := 'Importante';
+    FormMain.FormStyle := fsNormal;
+    Caption   := 'Importante';
+    FormStyle := fsStayOnTop;
     ShowModal;
+    Application.BringToFront;
+    FormMain.FormStyle := fsStayOnTop;
   finally
     Free
   end;
+end;
+
+Function Concatenar(Linhas: Array of String): String;
+var linha : string;
+begin
+  Result := '';
+  for linha in Linhas
+    do Result := Concat(Result, FimLinhaStr, linha);
+  Result := Copy(Result, 2, Result.Length);
+end;
+
+Function ConsultarSQLAssyncronamente( ScriptSQL : TArray<String>; RetornoSQL: TRetornoSQL; Callback: TCallBack): iTask;
+begin
+  RetornoSQL.Value := [[]];
+  Result := TTask.Run(
+  procedure
+  var Alias: TADOConnection;
+      Consultant: TAdoQuery;
+      ErrorMessage: String;
+      I, J: Integer;
+      Field: TField;
+  begin
+    Try
+      Try
+      {$Region 'Criar objeto de conexão com o banco e configura a conexão'}
+        CoInitialize(nil);
+        Alias := TAdoConnection.Create(Application);
+        Alias.Connected      := False;
+        //A conexão deve vir inicialmente fechada
+        //Com xaCommitRetaining após commitar ele abre uma nova transação,
+        //Com xaAbortRetaining  após abordar ele abre uma nova transação, custo muito alto.
+        Alias.Attributes := [];
+        Alias.CommandTimeout := 1;
+        //Se o comando demorar mais de 1 segundos ele aborta
+        Alias.ConnectionTimeout := 15;
+        //Se demorar mais de 15 segundos para abrir a conexão ele aborta
+        Alias.CursorLocation := clUseServer;
+        //Toda informação ao ser alterada sem commitar vai ficar no servidor.
+        Alias.DefaultDatabase := '';
+        Alias.IsolationLevel := ilReadUncommitted;
+        //Quero saber os campos que ainda não foram commitados também
+        Alias.KeepConnection := True;
+        Alias.LoginPrompt    := False;
+        Alias.Mode           := cmRead;
+        //Somente leitura
+        Alias.Name           := 'ConsultarSQLAssyncronamenteConnection';
+        Alias.Provider       := 'SQLNCLI11.1';
+        Alias.Tag            := 1;
+        //Para indicar que é usado em VerificarCamposDaTabela
+
+        ConfigurarConexao(Alias);
+        Alias.Connected        := True;
+      {$EndRegion}
+      {$Region 'Realiza consulta e escreve dados na tela'}
+        Consultant := TAdoQuery.Create(Application);
+        with consultant do begin
+          Close;
+          Connection := Alias;
+          SQL.Text   := Concatenar(ScriptSQL);
+          Open;
+          {$Region 'Se retornar algo ent�o retornar'}
+            First;
+            I := 0;
+            SetLength(RetornoSQL.Value, Consultant.RecordCount + 1);
+            SetLength(RetornoSQL.Value[I], Consultant.FieldCount);
+            While J < Consultant.FieldCount do begin
+              RetornoSQL.Value[I][J] := Consultant.Fields[J].FieldName;
+              INC(J)
+            end;
+            INC(I);
+            while not Eof do begin
+              // Pois o resto depende disso
+//              TThread.Synchronize(nil,
+//              Procedure
+//              begin
+                J := 0;
+                SetLength(RetornoSQL.Value[I], Consultant.FieldCount);
+                While J < Consultant.FieldCount do begin
+                  RetornoSQL.Value[I][J] := Consultant.Fields[J].AsString;
+                  INC(J)
+                end;
+//              end);
+              INC(I);
+              Next;
+            end;
+          {$EndRegion}
+        end;
+      {$EndRegion}
+      Finally
+        Consultant.Free;
+        Alias.Free;
+      End;
+    Except on E: Exception do
+           begin
+             ErrorMessage := E.Message;
+             TThread.Queue(nil,
+             Procedure
+             begin
+               Mensagem('Ocorreu o seguinte erro durante a execu��o: ' + ErrorMessage + FimLinhaStr + 
+                        'Do seguinte script:' + FimLinhaStr + Concatenar(ScriptSQL));
+             end);
+           end;
+    End;    // Pois o resto n�o precisa disso
+    TThread.Queue(nil,
+    Procedure
+    begin
+      Callback;
+      RetornoSQL.Free;
+    end);
+  end
+  );
+  Result.Start;  
 end;
 
 end.

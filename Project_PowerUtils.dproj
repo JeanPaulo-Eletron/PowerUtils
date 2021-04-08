@@ -103,6 +103,11 @@
         <DCCReference Include="UUtilitarios_PowerUtils.pas"/>
         <DCCReference Include="InterfaceRastreio_PowerUtils.pas"/>
         <DCCReference Include="UProceduresDosGatilhos_PowerUtils.pas"/>
+        <DCCReference Include="UModuloDeSQL_PowerUtils.pas">
+            <Form>FormSQL</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="HelpersPadrao.pas"/>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>
